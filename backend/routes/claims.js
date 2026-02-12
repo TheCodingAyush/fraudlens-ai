@@ -20,9 +20,14 @@ router.post('/submit', upload.fields([
   try {
     const { policyNumber, claimantName, claimantEmail, claimType, incidentDate, claimAmount, description } = req.body;
 
+    // Safely check if files exist before accessing them
+    const files = req.files || {};
+    const policyDocFile = files.policyDocument && files.policyDocument.length > 0 ? files.policyDocument[0] : null;
+    const damagePhotoFiles = files.damagePhotos && Array.isArray(files.damagePhotos) ? files.damagePhotos : [];
+
     // Convert uploaded files to base64 for storage in Firestore
-    const policyDoc = req.files.policyDocument ? req.files.policyDocument[0].buffer.toString('base64') : null;
-    const photos = req.files.damagePhotos ? req.files.damagePhotos.map(file => file.buffer.toString('base64')) : [];
+    const policyDoc = policyDocFile ? policyDocFile.buffer.toString('base64') : null;
+    const photos = damagePhotoFiles.map(file => file.buffer.toString('base64'));
 
     // OCR processing on policy document
     let extractedData = {};
@@ -31,9 +36,7 @@ router.post('/submit', upload.fields([
     }
 
     // Get image buffers for fraud detection image analysis
-    const imageBuffers = req.files.damagePhotos
-      ? req.files.damagePhotos.map(file => file.buffer)
-      : [];
+    const imageBuffers = damagePhotoFiles.map(file => file.buffer);
 
     // Fraud detection with image analysis
     const fraudAnalysis = await fraudDetection.analyzeClaim({
@@ -80,11 +83,25 @@ router.post('/submit', upload.fields([
 
     res.status(201).json({
       success: true,
-      claimId: claimRef.id,
-      status: decision.status,
-      fraudScore: fraudAnalysis.fraudScore,
-      decision: decision.explanation,
-      message: 'Claim processed successfully'
+      message: 'Claim processed successfully',
+      claim: {
+        id: claimRef.id,
+        policyNumber,
+        claimantName,
+        claimantEmail,
+        claimType,
+        incidentDate,
+        claimAmount: parseFloat(claimAmount),
+        description,
+        status: decision.status,
+        fraudScore: fraudAnalysis.fraudScore,
+        aiAnalysis: {
+          recommendation: decision.explanation,
+          riskLevel: fraudAnalysis.riskLevel,
+          indicators: fraudAnalysis.indicators
+        },
+        submittedAt: new Date().toISOString()
+      }
     });
 
   } catch (error) {

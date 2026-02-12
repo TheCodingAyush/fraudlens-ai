@@ -8,6 +8,11 @@ export interface AiAnalysis {
   confidence: number;
 }
 
+export interface ClaimFiles {
+  policyDocument?: string;
+  damagePhotos?: string[];
+}
+
 export interface Claim {
   id: string;
   policyNumber: string;
@@ -21,4 +26,5 @@ export interface Claim {
   fraudScore: number;
   submittedAt: string;
   aiAnalysis: AiAnalysis;
+  files?: ClaimFiles;
 }

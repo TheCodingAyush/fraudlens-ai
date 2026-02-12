@@ -1,13 +1,55 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, AlertTriangle, CheckCircle, Clock, FileText, Image, Shield } from "lucide-react";
+import { ArrowLeft, AlertTriangle, CheckCircle, Clock, FileText, Image as ImageIcon, Shield, Loader2, RefreshCw, X } from "lucide-react";
 import { motion } from "framer-motion";
-import { mockClaims } from "@/data/mockClaims";
+import { useQuery } from "@tanstack/react-query";
+import { fetchClaimById } from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import FraudScore from "@/components/FraudScore";
+import { Button } from "@/components/ui/button";
 
 const ClaimDetail = () => {
   const { id } = useParams();
-  const claim = mockClaims.find((c) => c.id === id);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const { data: claim, isLoading, error, refetch } = useQuery({
+    queryKey: ["claim", id],
+    queryFn: () => fetchClaimById(id!),
+    enabled: !!id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="mt-4 text-muted-foreground">Loading claim details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-foreground">
+            {error instanceof Error && error.message === "Claim not found" ? "Claim Not Found" : "Failed to load claim"}
+          </h2>
+          <p className="mt-2 text-muted-foreground">{error instanceof Error ? error.message : "An error occurred"}</p>
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <Link to="/dashboard" className="inline-flex items-center gap-1 text-primary hover:underline">
+              <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+            </Link>
+            <Button onClick={() => refetch()} variant="outline" size="sm">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!claim) {
     return (
@@ -72,15 +114,53 @@ const ClaimDetail = () => {
 
               <h3 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documents</h3>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 rounded-lg bg-secondary p-3 text-sm text-muted-foreground">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span>policy_document.pdf</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-lg bg-secondary p-3 text-sm text-muted-foreground">
-                  <Image className="h-4 w-4 text-primary" />
-                  <span>damage_photos (3 files)</span>
-                </div>
+                {claim.files?.policyDocument ? (
+                  <a
+                    href={claim.files.policyDocument}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-lg bg-secondary p-3 text-sm text-muted-foreground hover:bg-secondary/80 transition-colors"
+                  >
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span>View Policy Document</span>
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg bg-secondary p-3 text-sm text-muted-foreground">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span>No policy document</span>
+                  </div>
+                )}
               </div>
+
+              {/* Image Gallery */}
+              {claim.files?.damagePhotos && claim.files.damagePhotos.length > 0 && (
+                <>
+                  <h3 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Damage Photos ({claim.files.damagePhotos.length})
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {claim.files.damagePhotos.map((photo, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImage(photo)}
+                        className="aspect-square rounded-lg overflow-hidden bg-secondary hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <img
+                          src={photo}
+                          alt={`Damage photo ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {(!claim.files?.damagePhotos || claim.files.damagePhotos.length === 0) && (
+                <div className="mt-4 flex items-center gap-2 rounded-lg bg-secondary p-3 text-sm text-muted-foreground">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <span>No damage photos</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -126,6 +206,27 @@ const ClaimDetail = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Image Lightbox Modal */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <img
+            src={selectedImage}
+            alt="Full size damage photo"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 };

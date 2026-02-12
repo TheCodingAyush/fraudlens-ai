@@ -30,7 +30,12 @@ router.post('/submit', upload.fields([
       extractedData = await ocrService.extractFromDocument(policyDoc);
     }
 
-    // Fraud detection
+    // Get image buffers for fraud detection image analysis
+    const imageBuffers = req.files.damagePhotos
+      ? req.files.damagePhotos.map(file => file.buffer)
+      : [];
+
+    // Fraud detection with image analysis
     const fraudAnalysis = await fraudDetection.analyzeClaim({
       policyNumber,
       claimAmount: parseFloat(claimAmount),
@@ -38,7 +43,7 @@ router.post('/submit', upload.fields([
       claimType,
       description,
       extractedData
-    });
+    }, imageBuffers);
 
     // Decision engine
     const decision = decisionEngine.makeDecision(fraudAnalysis, claimAmount);
@@ -57,6 +62,13 @@ router.post('/submit', upload.fields([
       extractedData,
       fraudScore: fraudAnalysis.fraudScore,
       fraudIndicators: fraudAnalysis.indicators,
+      riskLevel: fraudAnalysis.riskLevel,
+      imageAnalysis: fraudAnalysis.imageAnalysis ? {
+        imageCount: fraudAnalysis.imageAnalysis.imageCount,
+        combinedFraudScore: fraudAnalysis.imageAnalysis.combinedFraudScore,
+        overallRiskLevel: fraudAnalysis.imageAnalysis.overallRiskLevel,
+        combinedIndicators: fraudAnalysis.imageAnalysis.combinedIndicators
+      } : null,
       status: decision.status,
       decision: decision.explanation,
       confidence: decision.confidence,

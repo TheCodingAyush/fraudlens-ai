@@ -14,9 +14,16 @@
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
+    "exif-parser": "^0.1.12",
     "express": "^5.2.1",
     "firebase-admin": "^13.6.1",
+    "franc-min": "^6.2.0",
+    "imghash": "^1.1.2",
+    "jimp": "^1.6.0",
     "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
+    "sharp": "^0.34.5",
     "tesseract.js": "^7.0.0"
   }
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Upload, ArrowLeft, CheckCircle } from "lucide-react";
+import { Upload, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { submitClaim, type SubmitClaimResponse } from "@/lib/api";
 import type { ClaimType } from "@/types/claim";
+import FraudScore from "@/components/FraudScore";
+import StatusBadge from "@/components/StatusBadge";
 
 const ClaimSubmission = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<SubmitClaimResponse | null>(null);
   const [formData, setFormData] = useState({
     policyNumber: "",
     claimantName: "",
@@ -26,14 +31,28 @@ const ClaimSubmission = () => {
   const [policyFile, setPolicyFile] = useState<File | null>(null);
   const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.policyNumber || !formData.claimantName || !formData.claimType || !formData.claimAmount) {
       toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
       return;
     }
-    setSubmitted(true);
-    toast({ title: "Claim Submitted", description: "Your claim is being processed by AI." });
+
+    setIsLoading(true);
+    try {
+      const result = await submitClaim(formData, policyFile, damagePhotos);
+      setSubmissionResult(result);
+      setSubmitted(true);
+      toast({ title: "Claim Submitted", description: "Your claim has been processed by AI." });
+    } catch (error) {
+      toast({
+        title: "Submission Failed",
+        description: error instanceof Error ? error.message : "Failed to submit claim. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (submitted) {
@@ -42,18 +61,42 @@ const ClaimSubmission = () => {
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
+          className="text-center max-w-md"
         >
           <div className="mb-6 inline-flex rounded-full bg-success/10 p-4">
             <CheckCircle className="h-12 w-12 text-success" />
           </div>
           <h2 className="text-2xl font-bold text-foreground">Claim Submitted Successfully</h2>
-          <p className="mt-2 text-muted-foreground">Our AI is analyzing your claim. You'll receive updates shortly.</p>
+          <p className="mt-2 text-muted-foreground">Your claim has been analyzed by our AI system.</p>
+
+          {submissionResult?.claim && (
+            <div className="mt-6 rounded-xl border border-border bg-card p-6 card-shadow text-left">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground">Claim ID</span>
+                <span className="font-mono font-semibold text-foreground">{submissionResult.claim.id}</span>
+              </div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <StatusBadge status={submissionResult.claim.status} />
+              </div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground">Fraud Score</span>
+                <FraudScore score={submissionResult.claim.fraudScore} />
+              </div>
+              {submissionResult.claim.aiAnalysis && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <p className="text-sm text-muted-foreground mb-2">AI Decision</p>
+                  <p className="text-sm text-foreground">{submissionResult.claim.aiAnalysis.recommendation}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-8 flex items-center justify-center gap-4">
             <Button onClick={() => navigate("/dashboard")} className="bg-primary text-primary-foreground hover:bg-primary/90">
               View Dashboard
             </Button>
-            <Button variant="outline" onClick={() => { setSubmitted(false); setFormData({ policyNumber: "", claimantName: "", claimantEmail: "", claimType: "", incidentDate: "", claimAmount: "", description: "" }); }}>
+            <Button variant="outline" onClick={() => { setSubmitted(false); setSubmissionResult(null); setFormData({ policyNumber: "", claimantName: "", claimantEmail: "", claimType: "", incidentDate: "", claimAmount: "", description: "" }); setPolicyFile(null); setDamagePhotos([]); }}>
               Submit Another
             </Button>
           </div>
@@ -147,8 +190,15 @@ const ClaimSubmission = () => {
               </div>
             </div>
 
-            <Button type="submit" size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-base font-semibold">
-              Submit Claim for AI Analysis
+            <Button type="submit" size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-base font-semibold" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Claim for AI Analysis"
+              )}
             </Button>
           </form>
         </motion.div>

@@ -1,7 +1,11 @@
+const imageAnalysis = require('./imageAnalysis');
+
 const fraudDetection = {
-    analyzeClaim: async (claimData) => {
+    analyzeClaim: async (claimData, imageBuffers = []) => {
         const indicators = [];
         let fraudScore = 0;
+
+        // ============== TEXT/DATA ANALYSIS ==============
 
         // Rule 1: Unusually high claim amount
         if (claimData.claimAmount > 50000) {
@@ -64,8 +68,41 @@ const fraudDetection = {
             fraudScore += 15;
         }
 
-        // Rule 9: Check for duplicate policy numbers (requires DB check)
-        // This would need actual DB query - simplified for now
+        // ============== IMAGE ANALYSIS ==============
+        let imageAnalysisResults = null;
+
+        if (imageBuffers && imageBuffers.length > 0) {
+            try {
+                imageAnalysisResults = await imageAnalysis.analyzeMultipleImages(imageBuffers, {
+                    claimType: claimData.claimType,
+                    incidentDate: claimData.incidentDate,
+                    policyNumber: claimData.policyNumber
+                });
+
+                // Add image-based indicators
+                indicators.push(...imageAnalysisResults.combinedIndicators);
+
+                // Weight image fraud score (images are strong evidence)
+                const imageWeight = 0.4; // 40% weight to image analysis
+                const textWeight = 0.6;  // 60% weight to text analysis
+
+                // Combine scores
+                const combinedTextScore = Math.min(fraudScore, 100);
+                fraudScore = Math.round(
+                    (combinedTextScore * textWeight) +
+                    (imageAnalysisResults.combinedFraudScore * imageWeight)
+                );
+
+            } catch (error) {
+                console.error('Image analysis failed:', error);
+                indicators.push('Image analysis failed - manual review recommended');
+                fraudScore += 10;
+            }
+        } else {
+            // No images provided
+            indicators.push('No damage photos provided for verification');
+            fraudScore += 15;
+        }
 
         // Normalize fraud score (0-100)
         fraudScore = Math.min(fraudScore, 100);
@@ -74,7 +111,8 @@ const fraudDetection = {
             fraudScore,
             indicators,
             riskLevel: getFraudRiskLevel(fraudScore),
-            recommendation: getRecommendation(fraudScore)
+            recommendation: getRecommendation(fraudScore),
+            imageAnalysis: imageAnalysisResults
         };
     }
 };

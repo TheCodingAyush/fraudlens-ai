@@ -1,9 +1,11 @@
-import { Link } from "react-router-dom";
-import { ArrowRight, Car, Home, Heart } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Car, Home, Heart, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
-import { mockClaims } from "@/data/mockClaims";
+import { useQuery } from "@tanstack/react-query";
+import { fetchClaims } from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import FraudScore from "@/components/FraudScore";
+import { Button } from "@/components/ui/button";
 
 const claimTypeIcon = {
   Auto: Car,
@@ -12,12 +14,45 @@ const claimTypeIcon = {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const { data: claims = [], isLoading, error, refetch } = useQuery({
+    queryKey: ["claims"],
+    queryFn: fetchClaims,
+  });
+
   const stats = {
-    total: mockClaims.length,
-    approved: mockClaims.filter((c) => c.status === "Approved").length,
-    pending: mockClaims.filter((c) => c.status === "Pending").length,
-    flagged: mockClaims.filter((c) => c.status === "Flagged").length,
+    total: claims.length,
+    approved: claims.filter((c) => c.status === "Approved").length,
+    pending: claims.filter((c) => c.status === "Pending").length,
+    flagged: claims.filter((c) => c.status === "Flagged").length,
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="mt-4 text-muted-foreground">Loading claims...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+          <h2 className="mt-4 text-xl font-semibold text-foreground">Failed to load claims</h2>
+          <p className="mt-2 text-muted-foreground">{error instanceof Error ? error.message : "An error occurred"}</p>
+          <Button onClick={() => refetch()} variant="outline" className="mt-4">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -66,7 +101,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {mockClaims.map((claim, i) => {
+                {claims.map((claim, i) => {
                   const Icon = claimTypeIcon[claim.claimType];
                   return (
                     <motion.tr
@@ -74,7 +109,8 @@ const Dashboard = () => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.04 }}
-                      className="group transition-colors hover:bg-secondary/30"
+                      className="group transition-colors hover:bg-secondary/30 cursor-pointer"
+                      onClick={() => navigate(`/claim/${claim.id}`)}
                     >
                       <td className="px-6 py-4 font-mono text-sm text-foreground">{claim.id}</td>
                       <td className="px-6 py-4">
@@ -101,6 +137,7 @@ const Dashboard = () => {
                         <Link
                           to={`/claim/${claim.id}`}
                           className="inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-all group-hover:opacity-100 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           View <ArrowRight className="h-3 w-3" />
                         </Link>

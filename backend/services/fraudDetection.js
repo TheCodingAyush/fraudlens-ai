@@ -42,23 +42,7 @@ const fraudDetection = {
             fraudScore += 10;
         }
 
-        // Rule 6: Policy number mismatch (if OCR extracted one)
-        if (claimData.extractedData?.policyNumber &&
-            claimData.extractedData.policyNumber !== claimData.policyNumber) {
-            indicators.push('Policy number mismatch with document');
-            fraudScore += 30;
-        }
-
-        // Rule 7: Excessive claim vs coverage
-        if (claimData.extractedData?.coverageAmount) {
-            const coverage = parseInt(claimData.extractedData.coverageAmount);
-            if (claimData.claimAmount > coverage * 0.9) {
-                indicators.push('Claim near or exceeds coverage limit');
-                fraudScore += 20;
-            }
-        }
-
-        // Rule 8: Suspicious keywords in description
+        // Rule 6: Suspicious keywords in description
         const suspiciousKeywords = ['total loss', 'completely destroyed', 'stolen', 'fire', 'flood'];
         const descLower = claimData.description?.toLowerCase() || '';
         const foundKeywords = suspiciousKeywords.filter(keyword => descLower.includes(keyword));
@@ -66,6 +50,64 @@ const fraudDetection = {
         if (foundKeywords.length >= 2) {
             indicators.push(`Multiple high-risk keywords: ${foundKeywords.join(', ')}`);
             fraudScore += 15;
+        }
+
+        // ============== DOCUMENT VALIDATION ANALYSIS ==============
+        // Use results from document validation service (OCR vs form data comparison)
+        let documentValidationScore = 0;
+
+        if (claimData.documentValidation) {
+            const docVal = claimData.documentValidation;
+
+            // Add all indicators from document validation
+            if (docVal.indicators && docVal.indicators.length > 0) {
+                indicators.push(...docVal.indicators);
+            }
+
+            // Add document validation fraud score
+            documentValidationScore = docVal.fraudScore || 0;
+
+            // Log validation summary
+            if (docVal.details) {
+                const details = docVal.details;
+
+                // Policy number validation status
+                if (details.policyNumber?.status === 'match') {
+                    // Good - policy number matches, no penalty
+                } else if (details.policyNumber?.status === 'mismatch') {
+                    // Already counted in docVal.fraudScore
+                    console.log('Document validation: Policy number mismatch detected');
+                } else if (details.policyNumber?.status === 'not_found') {
+                    console.log('Document validation: No policy number found in document');
+                }
+
+                // Name validation status
+                if (details.claimantName?.status === 'mismatch') {
+                    console.log(`Document validation: Name mismatch - similarity ${Math.round((details.claimantName.similarity || 0) * 100)}%`);
+                }
+
+                // Coverage validation
+                if (details.coverageAmount?.exceeds) {
+                    console.log('Document validation: Claim exceeds coverage');
+                }
+            }
+        } else if (claimData.extractedData && !claimData.extractedData.error) {
+            // Fallback: Use legacy OCR validation if document validation wasn't run
+            // Rule 6 (legacy): Policy number mismatch
+            if (claimData.extractedData?.policyNumber &&
+                claimData.extractedData.policyNumber !== claimData.policyNumber) {
+                indicators.push('Policy number mismatch with document');
+                fraudScore += 30;
+            }
+
+            // Rule 7 (legacy): Excessive claim vs coverage
+            if (claimData.extractedData?.coverageAmount) {
+                const coverage = parseInt(claimData.extractedData.coverageAmount);
+                if (claimData.claimAmount > coverage * 0.9) {
+                    indicators.push('Claim near or exceeds coverage limit');
+                    fraudScore += 20;
+                }
+            }
         }
 
         // ============== IMAGE ANALYSIS ==============
@@ -82,37 +124,69 @@ const fraudDetection = {
                 // Add image-based indicators
                 indicators.push(...imageAnalysisResults.combinedIndicators);
 
-                // Weight image fraud score (images are strong evidence)
-                const imageWeight = 0.4; // 40% weight to image analysis
-                const textWeight = 0.6;  // 60% weight to text analysis
-
-                // Combine scores
-                const combinedTextScore = Math.min(fraudScore, 100);
-                fraudScore = Math.round(
-                    (combinedTextScore * textWeight) +
-                    (imageAnalysisResults.combinedFraudScore * imageWeight)
-                );
-
             } catch (error) {
                 console.error('Image analysis failed:', error);
                 indicators.push('Image analysis failed - manual review recommended');
-                fraudScore += 10;
             }
         } else {
             // No images provided
             indicators.push('No damage photos provided for verification');
-            fraudScore += 15;
         }
 
-        // Normalize fraud score (0-100)
-        fraudScore = Math.min(fraudScore, 100);
+        // ============== COMBINE SCORES ==============
+        // Weight different analysis components
+        const textWeight = 0.35;      // 35% text/behavioral analysis
+        const docValWeight = 0.35;    // 35% document validation (OCR vs form)
+        const imageWeight = 0.30;     // 30% image analysis
+
+        const textScore = Math.min(fraudScore, 100);
+        const imageScore = imageAnalysisResults?.combinedFraudScore || 0;
+
+        // Calculate weighted combined score
+        let combinedScore;
+        if (imageAnalysisResults && claimData.documentValidation) {
+            // All three components available
+            combinedScore = Math.round(
+                (textScore * textWeight) +
+                (documentValidationScore * docValWeight) +
+                (imageScore * imageWeight)
+            );
+        } else if (claimData.documentValidation) {
+            // Text + document validation only
+            combinedScore = Math.round(
+                (textScore * 0.5) +
+                (documentValidationScore * 0.5)
+            );
+        } else if (imageAnalysisResults) {
+            // Text + image only
+            combinedScore = Math.round(
+                (textScore * 0.6) +
+                (imageScore * 0.4)
+            );
+        } else {
+            // Text only
+            combinedScore = textScore;
+        }
+
+        // Ensure score is in valid range
+        combinedScore = Math.max(0, Math.min(100, combinedScore));
 
         return {
-            fraudScore,
+            fraudScore: combinedScore,
             indicators,
-            riskLevel: getFraudRiskLevel(fraudScore),
-            recommendation: getRecommendation(fraudScore),
-            imageAnalysis: imageAnalysisResults
+            riskLevel: getFraudRiskLevel(combinedScore),
+            recommendation: getRecommendation(combinedScore),
+            imageAnalysis: imageAnalysisResults,
+            documentValidation: claimData.documentValidation ? {
+                score: documentValidationScore,
+                isValid: claimData.documentValidation.isValid
+            } : null,
+            breakdown: {
+                textAnalysisScore: textScore,
+                documentValidationScore,
+                imageAnalysisScore: imageScore,
+                weights: { text: textWeight, docVal: docValWeight, image: imageWeight }
+            }
         };
     }
 };

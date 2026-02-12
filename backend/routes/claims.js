@@ -5,6 +5,7 @@ const { db } = require('../config/firebase');
 const ocrService = require('../services/ocrService');
 const fraudDetection = require('../services/fraudDetection');
 const decisionEngine = require('../services/decisionEngine');
+const documentValidation = require('../services/documentValidation');
 
 // Configure multer here instead
 const upload = multer({
@@ -42,19 +43,50 @@ router.post('/submit', upload.fields([
       }
     }
 
+    // ============== DOCUMENT VALIDATION ==============
+    // Validate extracted OCR data against form submission
+    let documentValidationResult = null;
+    if (policyDoc && extractedData && !extractedData.error) {
+      try {
+        documentValidationResult = documentValidation.validateDocumentData(
+          extractedData,
+          {
+            policyNumber,
+            claimantName,
+            claimAmount: parseFloat(claimAmount),
+            incidentDate
+          }
+        );
+        console.log('Document validation completed:', {
+          isValid: documentValidationResult.isValid,
+          fraudScore: documentValidationResult.fraudScore,
+          indicators: documentValidationResult.indicators.length
+        });
+      } catch (validationError) {
+        console.warn('Document validation failed:', validationError.message);
+        documentValidationResult = {
+          error: 'Validation failed',
+          fraudScore: 0,
+          indicators: [],
+          warnings: ['Document validation could not be completed']
+        };
+      }
+    }
+
     // Get image buffers for fraud detection image analysis
     const imageBuffers = files.damagePhotos
       ? files.damagePhotos.map(file => file.buffer)
       : [];
 
-    // Fraud detection with image analysis
+    // Fraud detection with image analysis and document validation
     const fraudAnalysis = await fraudDetection.analyzeClaim({
       policyNumber,
       claimAmount: parseFloat(claimAmount),
       incidentDate,
       claimType,
       description,
-      extractedData
+      extractedData,
+      documentValidation: documentValidationResult // Pass validation results
     }, imageBuffers);
 
     // Decision engine
@@ -71,7 +103,18 @@ router.post('/submit', upload.fields([
       description,
       policyDocument: policyDoc,
       damagePhotos: photos,
-      extractedData,
+      extractedData: {
+        ...extractedData,
+        // Don't store raw text to save space, keep structured data
+        rawText: extractedData.rawText ? `[${extractedData.rawText.length} chars]` : ''
+      },
+      documentValidation: documentValidationResult ? {
+        isValid: documentValidationResult.isValid,
+        fraudScore: documentValidationResult.fraudScore,
+        indicators: documentValidationResult.indicators,
+        warnings: documentValidationResult.warnings,
+        details: documentValidationResult.details
+      } : null,
       fraudScore: fraudAnalysis.fraudScore,
       fraudIndicators: fraudAnalysis.indicators,
       riskLevel: fraudAnalysis.riskLevel,
@@ -104,6 +147,10 @@ router.post('/submit', upload.fields([
         description,
         status: decision.status,
         fraudScore: fraudAnalysis.fraudScore,
+        documentValidation: documentValidationResult ? {
+          isValid: documentValidationResult.isValid,
+          warnings: documentValidationResult.warnings
+        } : null,
         aiAnalysis: {
           recommendation: decision.explanation,
           riskLevel: fraudAnalysis.riskLevel,

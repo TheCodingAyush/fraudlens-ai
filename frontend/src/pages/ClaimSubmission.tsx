@@ -12,6 +12,7 @@ import { submitClaim, type SubmitClaimResponse } from "@/lib/api";
 import type { ClaimType } from "@/types/claim";
 import FraudScore from "@/components/FraudScore";
 import StatusBadge from "@/components/StatusBadge";
+import AIDecision from "@/components/AIDecision";
 
 const ClaimSubmission = () => {
   const navigate = useNavigate();
@@ -57,42 +58,48 @@ const ClaimSubmission = () => {
 
   if (submitted) {
     return (
-      <div className="flex min-h-[80vh] items-center justify-center">
+      <div className="flex min-h-[80vh] items-center justify-center py-12">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-md"
+          className="w-full max-w-3xl px-4"
         >
-          <div className="mb-6 inline-flex rounded-full bg-success/10 p-4">
-            <CheckCircle className="h-12 w-12 text-success" />
+          <div className="text-center mb-8">
+            <div className="mb-6 inline-flex rounded-full bg-success/10 p-4">
+              <CheckCircle className="h-12 w-12 text-success" />
+            </div>
+            <h2 className="text-3xl font-bold text-foreground">Claim Submitted Successfully</h2>
+            <p className="mt-2 text-muted-foreground">Your claim has been analyzed by our AI system.</p>
           </div>
-          <h2 className="text-2xl font-bold text-foreground">Claim Submitted Successfully</h2>
-          <p className="mt-2 text-muted-foreground">Your claim has been analyzed by our AI system.</p>
 
           {submissionResult?.claim && (
-            <div className="mt-6 rounded-xl border border-border bg-card p-6 card-shadow text-left">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-muted-foreground">Claim ID</span>
-                <span className="font-mono font-semibold text-foreground">{submissionResult.claim.id}</span>
-              </div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-muted-foreground">Status</span>
-                <StatusBadge status={submissionResult.claim.status} />
-              </div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-muted-foreground">Fraud Score</span>
-                <FraudScore score={submissionResult.claim.fraudScore} />
-              </div>
-              {submissionResult.claim.aiAnalysis && (
-                <div className="mt-4 pt-4 border-t border-border">
-                  <p className="text-sm text-muted-foreground mb-2">AI Decision</p>
-                  <p className="text-sm text-foreground">{submissionResult.claim.aiAnalysis.recommendation}</p>
+            <div className="mt-8 w-full max-w-2xl space-y-6">
+              <div className="rounded-xl border border-border bg-card p-6 card-shadow text-left space-y-4">
+                <div className="flex items-center justify-between pb-4 border-b border-border">
+                  <span className="text-sm text-muted-foreground">Claim ID</span>
+                  <span className="font-mono font-semibold text-foreground">{submissionResult.claim.id}</span>
                 </div>
+                <div className="flex items-center justify-between pb-4 border-b border-border">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <StatusBadge status={submissionResult.claim.status} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Fraud Score</span>
+                  <FraudScore score={submissionResult.claim.fraudScore} />
+                </div>
+              </div>
+
+              {submissionResult.claim.aiAnalysis && (
+                <AIDecision
+                  recommendation={submissionResult.claim.aiAnalysis.recommendation}
+                  status={submissionResult.claim.status}
+                  fraudScore={submissionResult.claim.fraudScore}
+                />
               )}
             </div>
           )}
 
-          <div className="mt-8 flex items-center justify-center gap-4">
+          <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
             <Button onClick={() => navigate("/dashboard")} className="bg-primary text-primary-foreground hover:bg-primary/90">
               View Dashboard
             </Button>

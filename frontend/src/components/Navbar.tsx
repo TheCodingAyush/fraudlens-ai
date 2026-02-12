@@ -1,6 +1,16 @@
-import { Link, useLocation } from "react-router-dom";
-import { Shield, Sun, Moon } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Shield, Sun, Moon, LogOut, User, LayoutDashboard, FileText, Plus } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavbarProps {
   rightContent?: React.ReactNode;
@@ -9,6 +19,13 @@ interface NavbarProps {
 const Navbar = ({ rightContent }: NavbarProps) => {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser, userProfile, isAdmin, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   return (
     <nav className="sticky top-0 z-50 glass">
@@ -20,15 +37,101 @@ const Navbar = ({ rightContent }: NavbarProps) => {
           </span>
         </Link>
         <div className="flex items-center gap-4">
-          {location.pathname !== "/" && (
-            <Link
-              to="/"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Home
-            </Link>
+          {/* Navigation Links */}
+          {currentUser && (
+            <div className="hidden sm:flex items-center gap-4">
+              {isAdmin ? (
+                <>
+                  <Link
+                    to="/dashboard"
+                    className={`text-sm transition-colors ${location.pathname === "/dashboard"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <LayoutDashboard className="h-4 w-4" /> Dashboard
+                    </span>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/my-claims"
+                    className={`text-sm transition-colors ${location.pathname === "/my-claims"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <FileText className="h-4 w-4" /> My Claims
+                    </span>
+                  </Link>
+                  <Link
+                    to="/submit"
+                    className={`text-sm transition-colors ${location.pathname === "/submit"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <Plus className="h-4 w-4" /> Submit Claim
+                    </span>
+                  </Link>
+                </>
+              )}
+            </div>
           )}
+
           {rightContent}
+
+          {/* User Menu or Login Button */}
+          {currentUser ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {userProfile?.displayName || userProfile?.email?.split("@")[0]}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span>{userProfile?.displayName}</span>
+                    <span className="text-xs text-muted-foreground font-normal">{userProfile?.email}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {isAdmin ? (
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
+                  </DropdownMenuItem>
+                ) : (
+                  <>
+                    <DropdownMenuItem onClick={() => navigate("/my-claims")}>
+                      <FileText className="mr-2 h-4 w-4" /> My Claims
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/submit")}>
+                      <Plus className="mr-2 h-4 w-4" /> Submit Claim
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" /> Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            location.pathname !== "/login" && location.pathname !== "/register" && (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/login">Sign In</Link>
+              </Button>
+            )
+          )}
+
           <button
             onClick={toggleTheme}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary/80"

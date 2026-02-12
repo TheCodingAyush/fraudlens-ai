@@ -1,5 +1,5 @@
 export type ClaimType = "Auto" | "Home" | "Health" | "Life" | "Travel" | "Property";
-export type ClaimStatus = "Approved" | "Pending" | "Flagged";
+export type ClaimStatus = "Approved" | "Pending" | "Flagged" | "approved" | "rejected" | "pending_info" | "manual_review";
 
 export interface AiAnalysis {
   summary: string;
@@ -27,4 +27,14 @@ export interface Claim {
   submittedAt: string;
   aiAnalysis: AiAnalysis;
   files?: ClaimFiles;
+  // Admin review fields
+  reviewedAt?: string;
+  reviewerName?: string;
+  reviewNotes?: string;
+  approvedAmount?: number;
+  rejectionReason?: string;
+  infoRequestMessage?: string;
+  requestedDocuments?: string[];
+  escalationReason?: string;
+  escalationPriority?: "low" | "medium" | "high";
 }

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { BarChart3, Zap, FileSearch, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import heroBg from "@/assets/hero-bg.jpg";
+import { useAuth } from "@/contexts/AuthContext";
 
 const features = [
   {
@@ -36,6 +37,8 @@ const fadeUp = {
 };
 
 const Landing = () => {
+  const { currentUser, isAdmin } = useAuth();
+
   return (
     <>
 
@@ -70,18 +73,48 @@ const Landing = () => {
               detect fraud with 95%+ accuracy, and deliver transparent risk assessments.
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
-              <Link
-                to="/submit"
-                className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl animate-pulse-glow"
-              >
-                Submit a Claim
-              </Link>
-              <Link
-                to="/dashboard"
-                className="inline-flex h-12 items-center rounded-lg border border-border bg-secondary px-8 text-base font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
-              >
-                View Dashboard
-              </Link>
+              {currentUser ? (
+                // Logged in user buttons
+                isAdmin ? (
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl animate-pulse-glow"
+                  >
+                    Go to Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      to="/submit"
+                      className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl animate-pulse-glow"
+                    >
+                      Submit a Claim
+                    </Link>
+                    <Link
+                      to="/my-claims"
+                      className="inline-flex h-12 items-center rounded-lg border border-border bg-secondary px-8 text-base font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
+                    >
+                      My Claims
+                    </Link>
+                  </>
+                )
+              ) : (
+                // Not logged in buttons
+                <>
+                  <Link
+                    to="/login"
+                    className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl animate-pulse-glow"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="inline-flex h-12 items-center rounded-lg border border-border bg-secondary px-8 text-base font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
+                  >
+                    Create Account
+                  </Link>
+                </>
+              )}
             </div>
           </motion.div>
         </div>

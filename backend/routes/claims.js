@@ -128,7 +128,14 @@ router.post('/submit', upload.fields([
       decision: decision.explanation,
       confidence: decision.confidence,
       submittedAt: new Date().toISOString(),
-      processedAt: new Date().toISOString()
+      processedAt: new Date().toISOString(),
+      // Initialize status history
+      statusHistory: [{
+        action: 'submitted',
+        timestamp: new Date().toISOString(),
+        status: decision.status,
+        notes: `AI processed with ${fraudAnalysis.riskLevel} risk level`
+      }]
     };
 
     const claimRef = await db.collection('claims').add(claimData);
@@ -169,15 +176,23 @@ router.post('/submit', upload.fields([
 // Get all claims (for dashboard)
 router.get('/', async (req, res) => {
   try {
-    const snapshot = await db.collection('claims').orderBy('submittedAt', 'desc').limit(50).get();
+    const { email } = req.query; // Optional filter by email
+    let query = db.collection('claims').orderBy('submittedAt', 'desc').limit(50);
+
+    const snapshot = await query.get();
     const claims = [];
 
     snapshot.forEach(doc => {
       const data = doc.data();
+      // If email filter provided, only include matching claims
+      if (email && data.claimantEmail?.toLowerCase() !== email.toLowerCase()) {
+        return;
+      }
       claims.push({
         id: doc.id,
         policyNumber: data.policyNumber,
         claimantName: data.claimantName,
+        claimantEmail: data.claimantEmail,
         claimType: data.claimType,
         claimAmount: data.claimAmount,
         status: data.status,
@@ -205,6 +220,248 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, claim: { id: doc.id, ...doc.data() } });
   } catch (error) {
     console.error('Error fetching claim:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============== ADMIN ACTIONS ==============
+
+// Approve claim
+router.post('/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewerName, approvedAmount, notes } = req.body;
+
+    const claimRef = db.collection('claims').doc(id);
+    const doc = await claimRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const claimData = doc.data();
+
+    // Create history entry
+    const historyEntry = {
+      action: 'approved',
+      timestamp: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      previousStatus: claimData.status,
+      notes: notes || '',
+      approvedAmount: approvedAmount || claimData.claimAmount
+    };
+
+    // Update claim
+    await claimRef.update({
+      status: 'approved',
+      approvedAmount: approvedAmount || claimData.claimAmount,
+      reviewedAt: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      reviewNotes: notes || '',
+      statusHistory: [...(claimData.statusHistory || []), historyEntry]
+    });
+
+    res.json({
+      success: true,
+      message: 'Claim approved successfully',
+      claim: {
+        id,
+        status: 'approved',
+        approvedAmount: approvedAmount || claimData.claimAmount,
+        reviewedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error approving claim:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Reject claim
+router.post('/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewerName, rejectionReason, notes } = req.body;
+
+    const claimRef = db.collection('claims').doc(id);
+    const doc = await claimRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const claimData = doc.data();
+
+    // Create history entry
+    const historyEntry = {
+      action: 'rejected',
+      timestamp: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      previousStatus: claimData.status,
+      rejectionReason: rejectionReason || 'Not specified',
+      notes: notes || ''
+    };
+
+    // Update claim
+    await claimRef.update({
+      status: 'rejected',
+      rejectionReason: rejectionReason || 'Not specified',
+      reviewedAt: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      reviewNotes: notes || '',
+      statusHistory: [...(claimData.statusHistory || []), historyEntry]
+    });
+
+    res.json({
+      success: true,
+      message: 'Claim rejected',
+      claim: {
+        id,
+        status: 'rejected',
+        rejectionReason: rejectionReason || 'Not specified',
+        reviewedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error rejecting claim:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Request more information
+router.post('/:id/request-info', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewerName, requestedDocuments, message, deadline } = req.body;
+
+    const claimRef = db.collection('claims').doc(id);
+    const doc = await claimRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const claimData = doc.data();
+
+    // Create history entry
+    const historyEntry = {
+      action: 'info_requested',
+      timestamp: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      previousStatus: claimData.status,
+      requestedDocuments: requestedDocuments || [],
+      message: message || ''
+    };
+
+    // Calculate deadline (default 7 days)
+    const responseDeadline = deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Update claim
+    await claimRef.update({
+      status: 'pending_info',
+      infoRequestedAt: new Date().toISOString(),
+      infoRequestDeadline: responseDeadline,
+      requestedDocuments: requestedDocuments || [],
+      infoRequestMessage: message || 'Additional documentation required',
+      reviewerName: reviewerName || 'Admin',
+      statusHistory: [...(claimData.statusHistory || []), historyEntry]
+    });
+
+    res.json({
+      success: true,
+      message: 'Information request sent',
+      claim: {
+        id,
+        status: 'pending_info',
+        requestedDocuments: requestedDocuments || [],
+        deadline: responseDeadline
+      }
+    });
+  } catch (error) {
+    console.error('Error requesting info:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Escalate claim for manual review
+router.post('/:id/escalate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewerName, reason, priority } = req.body;
+
+    const claimRef = db.collection('claims').doc(id);
+    const doc = await claimRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const claimData = doc.data();
+
+    // Create history entry
+    const historyEntry = {
+      action: 'escalated',
+      timestamp: new Date().toISOString(),
+      reviewerName: reviewerName || 'Admin',
+      previousStatus: claimData.status,
+      reason: reason || 'Requires senior review',
+      priority: priority || 'high'
+    };
+
+    // Update claim
+    await claimRef.update({
+      status: 'manual_review',
+      escalatedAt: new Date().toISOString(),
+      escalationReason: reason || 'Requires senior review',
+      escalationPriority: priority || 'high',
+      reviewerName: reviewerName || 'Admin',
+      statusHistory: [...(claimData.statusHistory || []), historyEntry]
+    });
+
+    res.json({
+      success: true,
+      message: 'Claim escalated for manual review',
+      claim: {
+        id,
+        status: 'manual_review',
+        priority: priority || 'high'
+      }
+    });
+  } catch (error) {
+    console.error('Error escalating claim:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get claim status history
+router.get('/:id/history', async (req, res) => {
+  try {
+    const doc = await db.collection('claims').doc(req.params.id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const data = doc.data();
+    const history = data.statusHistory || [];
+
+    // Add initial submission as first entry if no history
+    if (history.length === 0 && data.submittedAt) {
+      history.unshift({
+        action: 'submitted',
+        timestamp: data.submittedAt,
+        status: data.status
+      });
+    }
+
+    res.json({
+      success: true,
+      claimId: req.params.id,
+      currentStatus: data.status,
+      history
+    });
+  } catch (error) {
+    console.error('Error fetching history:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

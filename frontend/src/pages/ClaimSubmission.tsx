@@ -151,6 +151,9 @@ const ClaimSubmission = () => {
                       <SelectItem value="Auto">Auto</SelectItem>
                       <SelectItem value="Home">Home</SelectItem>
                       <SelectItem value="Health">Health</SelectItem>
+                      <SelectItem value="Life">Life</SelectItem>
+                      <SelectItem value="Travel">Travel</SelectItem>
+                      <SelectItem value="Property">Property</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Car, Home, Heart, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { ArrowRight, Car, Home, Heart, Loader2, AlertCircle, RefreshCw, Shield, Plane, Building } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { fetchClaims } from "@/lib/api";
@@ -7,10 +7,13 @@ import StatusBadge from "@/components/StatusBadge";
 import FraudScore from "@/components/FraudScore";
 import { Button } from "@/components/ui/button";
 
-const claimTypeIcon = {
+const claimTypeIcon: Record<string, React.ComponentType<{ className?: string }>> = {
   Auto: Car,
   Home: Home,
   Health: Heart,
+  Life: Shield,
+  Travel: Plane,
+  Property: Building,
 };
 
 const Dashboard = () => {
@@ -22,9 +25,9 @@ const Dashboard = () => {
 
   const stats = {
     total: claims.length,
-    approved: claims.filter((c) => c.status === "Approved").length,
-    pending: claims.filter((c) => c.status === "Pending").length,
-    flagged: claims.filter((c) => c.status === "Flagged").length,
+    approved: claims.filter((c) => c.status?.toUpperCase() === "APPROVED").length,
+    pending: claims.filter((c) => c.status?.toUpperCase() === "PENDING").length,
+    flagged: claims.filter((c) => c.status?.toUpperCase() === "FLAGGED").length,
   };
 
   if (isLoading) {

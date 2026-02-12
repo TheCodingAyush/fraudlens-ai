@@ -1,4 +1,4 @@
-export type ClaimType = "Auto" | "Home" | "Health";
+export type ClaimType = "Auto" | "Home" | "Health" | "Life" | "Travel" | "Property";
 export type ClaimStatus = "Approved" | "Pending" | "Flagged";
 
 export interface AiAnalysis {

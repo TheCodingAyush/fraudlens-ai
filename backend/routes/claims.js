@@ -20,23 +20,32 @@ router.post('/submit', upload.fields([
   try {
     const { policyNumber, claimantName, claimantEmail, claimType, incidentDate, claimAmount, description } = req.body;
 
-    // Safely check if files exist before accessing them
+    // Safely access uploaded files (may be undefined if no files uploaded)
     const files = req.files || {};
-    const policyDocFile = files.policyDocument && files.policyDocument.length > 0 ? files.policyDocument[0] : null;
-    const damagePhotoFiles = files.damagePhotos && Array.isArray(files.damagePhotos) ? files.damagePhotos : [];
 
     // Convert uploaded files to base64 for storage in Firestore
-    const policyDoc = policyDocFile ? policyDocFile.buffer.toString('base64') : null;
-    const photos = damagePhotoFiles.map(file => file.buffer.toString('base64'));
+    const policyDoc = files.policyDocument && files.policyDocument[0]
+      ? files.policyDocument[0].buffer.toString('base64')
+      : null;
+    const photos = files.damagePhotos
+      ? files.damagePhotos.map(file => file.buffer.toString('base64'))
+      : [];
 
     // OCR processing on policy document
     let extractedData = {};
     if (policyDoc) {
-      extractedData = await ocrService.extractFromDocument(policyDoc);
+      try {
+        extractedData = await ocrService.extractFromDocument(policyDoc);
+      } catch (ocrError) {
+        console.warn('OCR processing failed:', ocrError.message);
+        extractedData = { error: 'OCR processing failed', rawText: '' };
+      }
     }
 
     // Get image buffers for fraud detection image analysis
-    const imageBuffers = damagePhotoFiles.map(file => file.buffer);
+    const imageBuffers = files.damagePhotos
+      ? files.damagePhotos.map(file => file.buffer)
+      : [];
 
     // Fraud detection with image analysis
     const fraudAnalysis = await fraudDetection.analyzeClaim({

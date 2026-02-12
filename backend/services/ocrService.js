@@ -3,12 +3,24 @@ const { PDFDocument } = require('pdf-lib');
 const sharp = require('sharp');
 
 // pdf-parse default export handling
-let pdfParse;
+let pdfParse = null;
 try {
     const pdfParseModule = require('pdf-parse');
-    pdfParse = pdfParseModule.default || pdfParseModule;
+    // pdf-parse exports PDFParse as named export
+    if (typeof pdfParseModule === 'function') {
+        pdfParse = pdfParseModule;
+    } else if (pdfParseModule && typeof pdfParseModule.PDFParse === 'function') {
+        pdfParse = pdfParseModule.PDFParse;
+    } else if (pdfParseModule && typeof pdfParseModule.default === 'function') {
+        pdfParse = pdfParseModule.default;
+    } else {
+        console.warn('pdf-parse export format not recognized, keys:', Object.keys(pdfParseModule || {}));
+    }
+    if (pdfParse) {
+        console.log('✅ pdf-parse loaded successfully');
+    }
 } catch (e) {
-    console.warn('pdf-parse not available, PDF text extraction disabled');
+    console.warn('pdf-parse not available, PDF text extraction disabled:', e.message);
     pdfParse = null;
 }
 
@@ -213,27 +225,31 @@ const ocrService = {
 
     /**
      * OCR a scanned PDF by converting pages to images
+     * Note: Tesseract.js cannot process PDFs directly, so we convert to images first
      */
     ocrScannedPdf: async (buffer, options = {}) => {
         try {
-            // For scanned PDFs, we'll use Tesseract directly on the PDF
-            // Tesseract can handle PDF input
-            const lang = options.language || 'eng';
+            // Load PDF with pdf-lib to get page count
+            const pdfDoc = await PDFDocument.load(buffer);
+            const pageCount = pdfDoc.getPageCount();
+            const maxPages = Math.min(pageCount, options.maxPages || 5);
 
-            const recognizeOptions = {};
-            if (options.verbose) {
-                recognizeOptions.logger = m => console.log(m);
-            }
-            const { data } = await Tesseract.recognize(buffer, lang, recognizeOptions);
+            let allText = '';
+            let totalConfidence = 0;
+            let processedPages = 0;
+
+            // For now, return a message that scanned PDF OCR is limited
+            // Full implementation would require pdf-to-image conversion (canvas, poppler, etc.)
+            console.log(`Scanned PDF detected with ${pageCount} pages. Full OCR requires image conversion.`);
 
             return {
-                text: data.text,
-                confidence: data.confidence,
-                words: data.words
+                text: '[Scanned PDF - text extraction limited. Please upload images or searchable PDF]',
+                confidence: 0,
+                note: 'Scanned PDF OCR requires page-to-image conversion which is not fully implemented'
             };
         } catch (error) {
-            console.error('Scanned PDF OCR error:', error);
-            return { text: '', confidence: 0 };
+            console.error('Scanned PDF OCR error:', error.message);
+            return { text: '', confidence: 0, error: error.message };
         }
     },
 

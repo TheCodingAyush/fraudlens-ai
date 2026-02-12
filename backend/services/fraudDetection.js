@@ -1,0 +1,94 @@
+const fraudDetection = {
+    analyzeClaim: async (claimData) => {
+        const indicators = [];
+        let fraudScore = 0;
+
+        // Rule 1: Unusually high claim amount
+        if (claimData.claimAmount > 50000) {
+            indicators.push('High claim amount detected');
+            fraudScore += 25;
+        }
+
+        // Rule 2: Recent incident (same day submission - suspicious)
+        const incidentDate = new Date(claimData.incidentDate);
+        const today = new Date();
+        const daysDiff = Math.floor((today - incidentDate) / (1000 * 60 * 60 * 24));
+
+        if (daysDiff === 0) {
+            indicators.push('Claim submitted on same day as incident');
+            fraudScore += 20;
+        }
+
+        // Rule 3: Vague description
+        if (claimData.description && claimData.description.length < 50) {
+            indicators.push('Insufficient incident description');
+            fraudScore += 15;
+        }
+
+        // Rule 4: Weekend/Holiday incident (statistically higher fraud)
+        const dayOfWeek = incidentDate.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            indicators.push('Incident occurred on weekend');
+            fraudScore += 10;
+        }
+
+        // Rule 5: Round numbers (psychological indicator)
+        if (claimData.claimAmount % 1000 === 0) {
+            indicators.push('Claim amount is a round number');
+            fraudScore += 10;
+        }
+
+        // Rule 6: Policy number mismatch (if OCR extracted one)
+        if (claimData.extractedData?.policyNumber &&
+            claimData.extractedData.policyNumber !== claimData.policyNumber) {
+            indicators.push('Policy number mismatch with document');
+            fraudScore += 30;
+        }
+
+        // Rule 7: Excessive claim vs coverage
+        if (claimData.extractedData?.coverageAmount) {
+            const coverage = parseInt(claimData.extractedData.coverageAmount);
+            if (claimData.claimAmount > coverage * 0.9) {
+                indicators.push('Claim near or exceeds coverage limit');
+                fraudScore += 20;
+            }
+        }
+
+        // Rule 8: Suspicious keywords in description
+        const suspiciousKeywords = ['total loss', 'completely destroyed', 'stolen', 'fire', 'flood'];
+        const descLower = claimData.description?.toLowerCase() || '';
+        const foundKeywords = suspiciousKeywords.filter(keyword => descLower.includes(keyword));
+
+        if (foundKeywords.length >= 2) {
+            indicators.push(`Multiple high-risk keywords: ${foundKeywords.join(', ')}`);
+            fraudScore += 15;
+        }
+
+        // Rule 9: Check for duplicate policy numbers (requires DB check)
+        // This would need actual DB query - simplified for now
+
+        // Normalize fraud score (0-100)
+        fraudScore = Math.min(fraudScore, 100);
+
+        return {
+            fraudScore,
+            indicators,
+            riskLevel: getFraudRiskLevel(fraudScore),
+            recommendation: getRecommendation(fraudScore)
+        };
+    }
+};
+
+function getFraudRiskLevel(score) {
+    if (score >= 70) return 'HIGH';
+    if (score >= 40) return 'MEDIUM';
+    return 'LOW';
+}
+
+function getRecommendation(score) {
+    if (score >= 70) return 'MANUAL_REVIEW_REQUIRED';
+    if (score >= 40) return 'ADDITIONAL_VERIFICATION';
+    return 'AUTO_APPROVE';
+}
+
+module.exports = fraudDetection;
